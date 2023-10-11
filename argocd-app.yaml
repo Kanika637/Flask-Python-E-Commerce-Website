@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: python-web-app
+spec:
+  project: default  
+  source:
+    repoURL: https://github.com/Kanika637/Flask-Python-E-Commerce-Website
+    path: deployment.yml  # Path to your Kubernetes manifests within the repo
+    targetRevision: master # Specify the branch or tag
+  destination:
+    server: 'https://kubernetes.default.svc'  # URL of your Kubernetes cluster
+    namespace: argocd  # Target namespace for the deployment
+  syncPolicy:
+    automated:
+      prune: true  # Automatically remove resources not defined in the Git repository
+    syncOptions:
+      - CreateNamespace=true  # Ensure the namespace is created if it doesn't exist
