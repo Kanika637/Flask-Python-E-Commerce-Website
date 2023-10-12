@@ -1,105 +1,58 @@
 pipeline {
     agent any
-
-    environment {
-        NGINX_VM_SSH_CREDENTIALS = credentials('azure-cred')
-        NGINX_VM_IP = '20.205.13.24'
-        NGINX_VM_PATH = '/home/azureuser/sample-app'
-    }
-
-    stages {
+    
+stages {
         stage('Clone Repository') {
             steps {
-                git url: 'https://github.com/Kanika637/Flask-Python-E-Commerce-Website.git'
+                git(url: 'https://github.com/Kanika637/Flask-Python-E-Commerce-Website.git', branch: 'master')
             }
         }
-
-        stage('Install Dependencies') {
-            steps {
-               
-                sh 'pip install -r requirements.txt'
-            }
-        }
-
-        stage('Deploy to NGINX VM') {
+        
+        stage('Build Docker Image') {
             steps {
                 script {
-                    
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-cred', keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            sudo scp -r -i /home/azureuser/.ssh/sqlite.pem * azureuser@20.205.13.24:/home/azureuser/sample-app/
-                        """
+                    sh 'sudo docker build -t kanika26/python-web-comm-file .'
+                }
+            }
+        }
+        
+        stage('Push Docker Image to Docker Hub') {
+            steps {
+                script {
+                    // Authenticate with Docker Hub using credentials
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-cred', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        def dockerImage = 'kanika26/python-web-comm-file:latest'
+                        sh "sudo docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD"
+                        sh "sudo docker push $dockerImage"
                     }
                 }
             }
         }
-
-        stage('Write Nginx Configuration') {
+        
+        
+        stage('Deploy to EKS') {
             steps {
                 script {
-                    def nginxConfig = """
-                        server {
-                            listen 80;
-                            server_name 20.205.13.24;
+                    // Authenticate with AWS using your AWS credentials
+                    withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+                                     string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        // Set the AWS CLI environment variables
+                        sh "aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID"
+                        sh "aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY"
 
-                            location / {
-                                proxy_pass http://127.0.0.1:5000;
-                                proxy_set_header Host \$host;
-                                proxy_set_header X-Real-IP \$remote_addr;
-                            }
-                        }
-                    """
+                        // Authenticate with the EKS cluster
+                        sh "aws eks --region ap-south-1 update-kubeconfig --name my-eks-cluster"
 
-                   
-                    writeFile file: 'nginx_config', text: nginxConfig
-
-                    
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-cred', keyFileVariable: 'SSH_KEY')]) {
-                        sh "sudo scp -i /home/azureuser/.ssh/sqlite.pem -o StrictHostKeyChecking=no nginx_config azureuser@20.205.13.24:/home/azureuser/nginx-code"
-                    }
-
-                    
-                    sh """
-                        sudo ssh -i /home/azureuser/.ssh/sqlite.pem -o StrictHostKeyChecking=no azureuser@20.205.13.24 'sudo mv /home/azureuser/nginx-code/nginx_config /etc/nginx/sites-available/my_app'
-                    """
-                }
-            }
-        }
-
-        stage('Restart NGINX') {
-            steps {
-                script {
-                  
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-cred', keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            sudo ssh -i /home/azureuser/.ssh/sqlite.pem -o StrictHostKeyChecking=no azureuser@20.205.13.24 'sudo systemctl restart nginx'
-                        """
+                        // Deploy the Kubernetes manifests to the EKS cluster
+                        sh "kubectl apply -f deployment.yml"
                     }
                 }
             }
-        }
+        
 
-        stage('Start Application') {
-            steps {
-                script {
-                    
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-cred', keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            sudo ssh -i /home/azureuser/.ssh/sqlite.pem -o StrictHostKeyChecking=no azureuser@20.205.13.24 'pkill -f "python3 wsgi.py"'
-                        """
-                    }
-
-                    
-                    withCredentials([sshUserPrivateKey(credentialsId: 'azure-cred', keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            sudo ssh -i /home/azureuser/.ssh/sqlite.pem -o StrictHostKeyChecking=no azureuser@20.205.13.24 'cd /home/azureuser/sample-app && python3 wsgi.py &'
-                        """
-                    }
-
-                   
-                    sleep time: 300, unit: 'SECONDS'
-                }
-            }
-        }
+    
+        }    
+        
+        
     }
 }
