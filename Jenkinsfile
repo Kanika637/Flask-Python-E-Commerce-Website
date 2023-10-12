@@ -33,17 +33,17 @@ stages {
         stage('Deploy to EKS') {
             steps {
                 script {
-                    // Authenticate with AWS using your AWS credentials
+                    
                     withCredentials([string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
                                      string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-                        // Set the AWS CLI environment variables
+                        
                         sh "aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID"
                         sh "aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY"
 
-                        // Authenticate with the EKS cluster
+                        
                         sh "aws eks --region ap-south-1 update-kubeconfig --name my-eks-cluster"
 
-                        // Deploy the Kubernetes manifests to the EKS cluster
+                        
                         sh "kubectl apply -f deployment.yml"
                     }
                 }
